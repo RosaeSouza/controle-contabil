@@ -114,6 +114,16 @@ export default function Home() {
     carregarControles()
   }
 
+  // ✅ NOVA FUNÇÃO (SEM REMOVER NADA)
+  async function alterarResponsavel(cliente_id: string, novoResponsavel: string) {
+    await supabase
+      .from('clientes')
+      .update({ responsavel: novoResponsavel })
+      .eq('id', cliente_id)
+
+    carregarControles()
+  }
+
   const controlesFiltrados = controles.filter((c) => {
     const fechado =
       c.financeiro &&
@@ -292,7 +302,20 @@ export default function Home() {
                 return (
                   <tr key={c.id} className="border-b text-center">
                     <td className="py-3 text-left">{c.nome}</td>
-                    <td>{c.responsavel}</td>
+
+                    <td>
+                      <select
+                        value={c.responsavel}
+                        onChange={(e) =>
+                          alterarResponsavel(c.cliente_id, e.target.value)
+                        }
+                        className="border rounded px-2 py-1 text-sm"
+                      >
+                        {responsaveis.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    </td>
 
                     {['financeiro','fiscal','folha','conciliado'].map((campo) => (
                       <td key={campo}>
