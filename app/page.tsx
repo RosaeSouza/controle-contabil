@@ -23,6 +23,18 @@ export default function Home() {
   const [filtroResp, setFiltroResp] = useState('Todos')
   const [somentePendentes, setSomentePendentes] = useState(false)
 
+  // 🔐 LOGIN
+  const [logado, setLogado] = useState(false)
+  const [senhaInput, setSenhaInput] = useState('')
+
+  function login() {
+    if (senhaInput === 'Tetr@2025') {
+      setLogado(true)
+    } else {
+      alert('Senha incorreta')
+    }
+  }
+
   useEffect(() => {
     carregarControles()
   }, [mes, ano])
@@ -41,7 +53,7 @@ export default function Home() {
         .eq('cliente_id', cliente.id)
         .eq('mes', mes)
         .eq('ano', ano)
-        .single()
+        .maybeSingle()
 
       if (!existente) {
         await supabase.from('controles_mensais').insert([
@@ -114,7 +126,6 @@ export default function Home() {
     carregarControles()
   }
 
-  // ✅ NOVA FUNÇÃO (SEM REMOVER NADA)
   async function alterarResponsavel(cliente_id: string, novoResponsavel: string) {
     await supabase
       .from('clientes')
@@ -151,6 +162,36 @@ export default function Home() {
 
   const responsaveis = ['Benedito', 'Clarice', 'João Pedro']
 
+  // 🔐 BLOQUEIO DE LOGIN
+  if (!logado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-8 rounded-xl shadow-md text-center">
+          <h2 className="text-xl font-semibold mb-4">
+            Acesso Restrito
+          </h2>
+
+          <input
+            type="password"
+            placeholder="Digite a senha"
+            value={senhaInput}
+            onChange={(e) => setSenhaInput(e.target.value)}
+            className="border rounded-lg p-2 mb-4 w-64"
+          />
+
+          <br />
+
+          <button
+            onClick={login}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+          >
+            Entrar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-10">
       <div className="max-w-7xl mx-auto">
@@ -162,7 +203,6 @@ export default function Home() {
           CONTROLE DE FECHAMENTO CONTÁBIL
         </h2>
 
-        {/* Painel Resumo */}
         <div className="bg-white shadow-md rounded-xl p-6 mb-8">
           <h3 className="font-semibold mb-4">
             📊 Resumo do Mês {mes}/{ano}
@@ -177,13 +217,12 @@ export default function Home() {
 
           <div className="w-full bg-gray-200 h-3 rounded-full">
             <div
-              className="bg-green-500 h-3 rounded-full transition-all duration-500"
+              className="bg-green-500 h-3 rounded-full"
               style={{ width: `${percentualGeral}%` }}
             />
           </div>
         </div>
 
-        {/* Dashboard Responsáveis */}
         <div className="grid grid-cols-3 gap-6 mb-8">
           {responsaveis.map((resp) => {
             const lista = controles.filter(c => c.responsavel === resp)
@@ -208,7 +247,6 @@ export default function Home() {
           })}
         </div>
 
-        {/* Cadastro */}
         <div className="bg-white shadow-md rounded-xl p-6 mb-8 flex justify-center space-x-3">
           <input
             type="text"
@@ -232,47 +270,26 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Filtros */}
         <div className="bg-white shadow-md rounded-xl p-6 mb-8 flex justify-center space-x-4 items-center">
-          <select
-            value={mes}
-            onChange={(e) => setMes(Number(e.target.value))}
-            className="border rounded-lg p-2"
-          >
+          <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="border rounded-lg p-2">
             {[...Array(12)].map((_, i) => (
-              <option key={i + 1} value={i + 1}>
-                Mês {i + 1}
-              </option>
+              <option key={i + 1} value={i + 1}>Mês {i + 1}</option>
             ))}
           </select>
 
-          <input
-            type="number"
-            value={ano}
-            onChange={(e) => setAno(Number(e.target.value))}
-            className="border rounded-lg p-2 w-24"
-          />
+          <input type="number" value={ano} onChange={(e) => setAno(Number(e.target.value))} className="border rounded-lg p-2 w-24" />
 
-          <select
-            value={filtroResp}
-            onChange={(e) => setFiltroResp(e.target.value)}
-            className="border rounded-lg p-2"
-          >
+          <select value={filtroResp} onChange={(e) => setFiltroResp(e.target.value)} className="border rounded-lg p-2">
             <option>Todos</option>
             {responsaveis.map(r => <option key={r}>{r}</option>)}
           </select>
 
           <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={somentePendentes}
-              onChange={(e) => setSomentePendentes(e.target.checked)}
-            />
+            <input type="checkbox" checked={somentePendentes} onChange={(e) => setSomentePendentes(e.target.checked)} />
             <span>Somente Pendentes</span>
           </label>
         </div>
 
-        {/* Tabela */}
         <div className="bg-white shadow-md rounded-xl p-6 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -290,12 +307,7 @@ export default function Home() {
             </thead>
             <tbody>
               {controlesFiltrados.map((c) => {
-                const total =
-                  Number(c.financeiro) +
-                  Number(c.fiscal) +
-                  Number(c.folha) +
-                  Number(c.conciliado)
-
+                const total = Number(c.financeiro) + Number(c.fiscal) + Number(c.folha) + Number(c.conciliado)
                 const percentual = Math.round((total / 4) * 100)
                 const fechado = percentual === 100
 
@@ -304,13 +316,7 @@ export default function Home() {
                     <td className="py-3 text-left">{c.nome}</td>
 
                     <td>
-                      <select
-                        value={c.responsavel}
-                        onChange={(e) =>
-                          alterarResponsavel(c.cliente_id, e.target.value)
-                        }
-                        className="border rounded px-2 py-1 text-sm"
-                      >
+                      <select value={c.responsavel} onChange={(e) => alterarResponsavel(c.cliente_id, e.target.value)} className="border rounded px-2 py-1 text-sm">
                         {responsaveis.map((r) => (
                           <option key={r} value={r}>{r}</option>
                         ))}
@@ -322,9 +328,7 @@ export default function Home() {
                         <input
                           type="checkbox"
                           checked={(c as any)[campo]}
-                          onChange={(e) =>
-                            atualizarCampo(c.id, campo, e.target.checked)
-                          }
+                          onChange={(e) => atualizarCampo(c.id, campo, e.target.checked)}
                         />
                       </td>
                     ))}
@@ -333,21 +337,14 @@ export default function Home() {
 
                     <td>
                       {fechado ? (
-                        <span className="text-green-600 font-semibold">
-                          FECHADO
-                        </span>
+                        <span className="text-green-600 font-semibold">FECHADO</span>
                       ) : (
-                        <span className="text-red-600 font-semibold">
-                          PENDENTE
-                        </span>
+                        <span className="text-red-600 font-semibold">PENDENTE</span>
                       )}
                     </td>
 
                     <td>
-                      <button
-                        onClick={() => excluirCliente(c.cliente_id)}
-                        className="text-red-500 text-xs"
-                      >
+                      <button onClick={() => excluirCliente(c.cliente_id)} className="text-red-500 text-xs">
                         Excluir
                       </button>
                     </td>
