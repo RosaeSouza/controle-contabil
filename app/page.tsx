@@ -18,10 +18,35 @@ export default function Home() {
   const [controles, setControles] = useState<Controle[]>([])
   const [mes, setMes] = useState(new Date().getMonth() + 1)
   const [ano, setAno] = useState(new Date().getFullYear())
-  const [nome, setNome] = useState('')
-  const [responsavel, setResponsavel] = useState('Benedito')
+
   const [filtroResp, setFiltroResp] = useState('Todos')
   const [somentePendentes, setSomentePendentes] = useState(false)
+  const [usuarioLogado, setUsuarioLogado] = useState('Todos')
+
+  const [logado, setLogado] = useState(false)
+  const [senhaInput, setSenhaInput] = useState('')
+
+  const responsaveis = ['Benedito', 'Clarice', 'João Pedro']
+
+  // 🔐 LOGIN PERSISTENTE
+  useEffect(() => {
+    const acesso = localStorage.getItem('logado')
+    if (acesso === 'true') setLogado(true)
+  }, [])
+
+  function login() {
+    if (senhaInput === 'Tetr@2025') {
+      setLogado(true)
+      localStorage.setItem('logado', 'true')
+    } else {
+      alert('Senha incorreta')
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem('logado')
+    setLogado(false)
+  }
 
   useEffect(() => {
     carregarControles()
@@ -51,13 +76,8 @@ export default function Home() {
       const { data } = await supabase
         .from('controles_mensais')
         .select(`
-          id,
-          cliente_id,
-          financeiro,
-          fiscal,
-          folha,
-          conciliado,
-          clientes (nome,responsavel)
+          id, cliente_id, financeiro, fiscal, folha, conciliado,
+          clientes (nome, responsavel)
         `)
         .eq('mes', mes)
         .eq('ano', ano)
@@ -91,12 +111,14 @@ export default function Home() {
     carregarControles()
   }
 
-  const responsaveis = ['Benedito', 'Clarice', 'João Pedro']
-
+  // 🔍 FILTROS
   const controlesFiltrados = controles.filter((c) => {
     const fechado = c.financeiro && c.fiscal && c.folha && c.conciliado
+
     if (filtroResp !== 'Todos' && c.responsavel !== filtroResp) return false
+    if (usuarioLogado !== 'Todos' && c.responsavel !== usuarioLogado) return false
     if (somentePendentes && fechado) return false
+
     return true
   })
 
@@ -105,16 +127,40 @@ export default function Home() {
   const pendentes = total - fechados
   const perc = total ? Math.round((fechados / total) * 100) : 0
 
+  // 🔐 TELA LOGIN
+  if (!logado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-8 rounded-xl shadow text-center">
+          <h2 className="mb-4 text-xl">Acesso</h2>
+          <input
+            type="password"
+            placeholder="Senha"
+            value={senhaInput}
+            onChange={(e) => setSenhaInput(e.target.value)}
+            className="border p-2 rounded mb-4 w-full"
+          />
+          <button onClick={login} className="bg-blue-600 text-white px-4 py-2 rounded w-full">
+            Entrar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
 
       {/* HEADER */}
-      <div className="bg-white shadow-md px-4 md:px-10 py-4 flex justify-between items-center">
-        <h1 className="font-bold text-lg md:text-2xl">
-          RESULTS CONTADORES
-        </h1>
+      <div className="bg-white shadow px-4 md:px-10 py-4 flex justify-between items-center">
+        <h1 className="font-bold text-lg md:text-2xl">RESULTS CONTADORES</h1>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <select value={usuarioLogado} onChange={(e)=>setUsuarioLogado(e.target.value)} className="border p-1 rounded">
+            <option>Todos</option>
+            {responsaveis.map(r=><option key={r}>{r}</option>)}
+          </select>
+
           <select value={mes} onChange={(e)=>setMes(Number(e.target.value))} className="border p-1 rounded">
             {[...Array(12)].map((_,i)=>(
               <option key={i+1} value={i+1}>Mês {i+1}</option>
@@ -122,6 +168,8 @@ export default function Home() {
           </select>
 
           <input value={ano} onChange={(e)=>setAno(Number(e.target.value))} className="border p-1 rounded w-20"/>
+
+          <button onClick={logout} className="text-red-500 text-sm">Sair</button>
         </div>
       </div>
 
@@ -145,17 +193,26 @@ export default function Home() {
           </div>
         </div>
 
-        {/* FILTROS */}
-        <div className="bg-white p-4 rounded-xl shadow mb-6 flex flex-wrap gap-2">
-          <select value={filtroResp} onChange={(e)=>setFiltroResp(e.target.value)} className="border p-2 rounded">
-            <option>Todos</option>
-            {responsaveis.map(r=><option key={r}>{r}</option>)}
-          </select>
+        {/* DASHBOARD POR RESPONSÁVEL */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {responsaveis.map(resp=>{
+            const lista = controles.filter(c=>c.responsavel===resp)
+            const total = lista.length
+            const fech = lista.filter(c=>c.financeiro&&c.fiscal&&c.folha&&c.conciliado).length
+            const p = total ? Math.round((fech/total)*100):0
 
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={somentePendentes} onChange={(e)=>setSomentePendentes(e.target.checked)}/>
-            Pendentes
-          </label>
+            return (
+              <div key={resp} className="bg-white p-4 rounded-xl shadow">
+                <div className="flex justify-between mb-2">
+                  <span>{resp}</span>
+                  <span>{p}%</span>
+                </div>
+                <div className="w-full bg-gray-200 h-3 rounded">
+                  <div className="bg-blue-500 h-3 rounded" style={{width:`${p}%`}}/>
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* TABELA */}
