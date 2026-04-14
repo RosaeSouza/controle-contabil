@@ -16,6 +16,16 @@ type Controle = {
   conciliado: boolean
 }
 
+type HistoricoRow = {
+  id: string
+  mes: number
+  ano: number
+  financeiro: boolean
+  fiscal: boolean
+  folha: boolean
+  conciliado: boolean
+}
+
 type Stats = {
   total: number
   fechados: number
@@ -32,10 +42,10 @@ const MESES = [
 ]
 
 const CAMPOS = [
-  { key: 'financeiro', label: 'Fin' },
-  { key: 'fiscal',     label: 'Fis' },
-  { key: 'folha',      label: 'Fol' },
-  { key: 'conciliado', label: 'Conc' },
+  { key: 'financeiro', label: 'Fin',  full: 'Financeiro' },
+  { key: 'fiscal',     label: 'Fis',  full: 'Fiscal'     },
+  { key: 'folha',      label: 'Fol',  full: 'Folha'      },
+  { key: 'conciliado', label: 'Conc', full: 'Conciliado' },
 ] as const
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
@@ -62,7 +72,6 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)' }}>
       <div className="w-full max-w-sm">
-        {/* Logo area */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 mb-4 shadow-lg shadow-blue-600/30">
             <span className="text-white font-bold text-2xl">R</span>
@@ -70,8 +79,6 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
           <h1 className="text-white font-bold text-xl tracking-wide">RESULTS CONTADORES</h1>
           <p className="text-slate-400 text-sm mt-1">Controle de Fechamento Mensal</p>
         </div>
-
-        {/* Card */}
         <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8">
           <label className="block text-slate-300 text-sm mb-2 font-medium">Senha de Acesso</label>
           <input
@@ -83,9 +90,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
             className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
             autoFocus
           />
-          {erro && (
-            <p className="text-red-400 text-xs mt-2">Senha incorreta. Tente novamente.</p>
-          )}
+          {erro && <p className="text-red-400 text-xs mt-2">Senha incorreta. Tente novamente.</p>}
           <button
             onClick={handleLogin}
             disabled={loading || !senha}
@@ -132,10 +137,150 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string 
 function ProgressBar({ value, color = 'bg-blue-500' }: { value: number; color?: string }) {
   return (
     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-      <div
-        className={`h-2 rounded-full transition-all duration-700 ${color}`}
-        style={{ width: `${value}%` }}
-      />
+      <div className={`h-2 rounded-full transition-all duration-700 ${color}`} style={{ width: `${value}%` }} />
+    </div>
+  )
+}
+
+// ─── Check Badge (histórico) ───────────────────────────────────────────────────
+
+function CheckBadge({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+      ok ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'
+    }`}>
+      {ok ? '✓' : '○'} {label}
+    </span>
+  )
+}
+
+// ─── Modal Histórico da Empresa ───────────────────────────────────────────────
+
+function ModalHistorico({
+  empresa,
+  onClose,
+}: {
+  empresa: { id: string; nome: string; responsavel: string }
+  onClose: () => void
+}) {
+  const [historico, setHistorico] = useState<HistoricoRow[]>([])
+  const [loading, setLoading]     = useState(true)
+
+  useEffect(() => {
+    async function carregar() {
+      setLoading(true)
+      const { data } = await supabase
+        .from('controles_mensais')
+        .select('id, mes, ano, financeiro, fiscal, folha, conciliado')
+        .eq('cliente_id', empresa.id)
+        .order('ano',  { ascending: false })
+        .order('mes',  { ascending: false })
+      setHistorico(data || [])
+      setLoading(false)
+    }
+    carregar()
+  }, [empresa.id])
+
+  function handleBackdrop(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.target === e.currentTarget) onClose()
+  }
+
+  const totalMeses  = historico.length
+  const mesesFeitos = historico.filter(h => h.financeiro && h.fiscal && h.folha && h.conciliado).length
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+      onClick={handleBackdrop}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+
+        {/* Header do modal */}
+        <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">{empresa.nome}</h2>
+            <p className="text-sm text-slate-400 mt-0.5">
+              Responsável: <span className="text-slate-600 font-medium">{empresa.responsavel}</span>
+              {totalMeses > 0 && (
+                <span className="ml-3">· {mesesFeitos}/{totalMeses} meses fechados</span>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-700 transition-colors text-2xl leading-none mt-0.5"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Corpo */}
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {loading ? (
+            <div className="space-y-3">
+              {[0,1,2,3,4].map(i => (
+                <div key={i} className="h-14 bg-slate-100 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : historico.length === 0 ? (
+            <div className="text-center py-16 text-slate-400">
+              <div className="text-4xl mb-2">📭</div>
+              <p>Nenhum registro encontrado para esta empresa.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {historico.map(h => {
+                const fechado  = h.financeiro && h.fiscal && h.folha && h.conciliado
+                const semNada  = !h.financeiro && !h.fiscal && !h.folha && !h.conciliado
+                return (
+                  <div
+                    key={h.id}
+                    className={`flex items-center gap-4 px-4 py-3 rounded-xl border ${
+                      fechado  ? 'bg-emerald-50  border-emerald-200' :
+                      semNada  ? 'bg-amber-50    border-amber-200'   :
+                                 'bg-white       border-slate-200'
+                    }`}
+                  >
+                    {/* Mês/Ano */}
+                    <div className="w-28 flex-shrink-0">
+                      <p className="text-sm font-semibold text-slate-700">{MESES[h.mes - 1]}</p>
+                      <p className="text-xs text-slate-400">{h.ano}</p>
+                    </div>
+
+                    {/* Badges */}
+                    <div className="flex flex-wrap gap-1.5 flex-1">
+                      {CAMPOS.map(c => (
+                        <CheckBadge key={c.key} ok={(h as any)[c.key]} label={c.full} />
+                      ))}
+                    </div>
+
+                    {/* Status geral */}
+                    <div className="flex-shrink-0">
+                      {fechado ? (
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">✓ Fechado</span>
+                      ) : semNada ? (
+                        <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-full">⏰ Sem atividade</span>
+                      ) : (
+                        <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-full">◑ Parcial</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Rodapé */}
+        <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
+          <button
+            onClick={onClose}
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors px-4 py-2 rounded-lg hover:bg-slate-100"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -143,19 +288,20 @@ function ProgressBar({ value, color = 'bg-blue-500' }: { value: number; color?: 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [logado, setLogado]               = useState(false)
-  const [controles, setControles]         = useState<Controle[]>([])
-  const [loading, setLoading]             = useState(false)
-  const [erro, setErro]                   = useState<string | null>(null)
-  const [mes, setMes]                     = useState(new Date().getMonth() + 1)
-  const [ano, setAno]                     = useState(new Date().getFullYear())
-  const [filtroResp, setFiltroResp]       = useState('Todos')
+  const [logado, setLogado]                     = useState(false)
+  const [controles, setControles]               = useState<Controle[]>([])
+  const [loading, setLoading]                   = useState(false)
+  const [erro, setErro]                         = useState<string | null>(null)
+  const [mes, setMes]                           = useState(new Date().getMonth() + 1)
+  const [ano, setAno]                           = useState(new Date().getFullYear())
+  const [filtroResp, setFiltroResp]             = useState('Todos')
   const [somentePendentes, setSomentePendentes] = useState(false)
-  const [novoNome, setNovoNome]           = useState('')
-  const [novoResp, setNovoResp]           = useState('Benedito')
-  const [adicionando, setAdicionando]     = useState(false)
+  const [buscaEmpresa, setBuscaEmpresa]         = useState('')
+  const [empresaModal, setEmpresaModal]         = useState<{ id: string; nome: string; responsavel: string } | null>(null)
+  const [novoNome, setNovoNome]                 = useState('')
+  const [novoResp, setNovoResp]                 = useState('Benedito')
+  const [adicionando, setAdicionando]           = useState(false)
 
-  // Verifica login salvo
   useEffect(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('logado') === 'true') {
       setLogado(true)
@@ -167,25 +313,19 @@ export default function Home() {
     setLoading(true)
     setErro(null)
     try {
-      // 1. Busca todos os clientes
       const { data: clientes, error: errClientes } = await supabase
-        .from('clientes')
-        .select('*')
-
+        .from('clientes').select('*')
       if (errClientes) throw errClientes
 
       const clientesLista = clientes || []
 
-      // 2. Busca todos os controles do mês/ano em UMA só query
       const { data: existentes, error: errExistentes } = await supabase
         .from('controles_mensais')
         .select('cliente_id')
         .eq('mes', mes)
         .eq('ano', ano)
-
       if (errExistentes) throw errExistentes
 
-      // 3. Identifica quais clientes NÃO têm registro e insere em bulk
       const idsExistentes = new Set((existentes || []).map((r: any) => r.cliente_id))
       const paraInserir = clientesLista
         .filter(c => !idsExistentes.has(c.id))
@@ -193,18 +333,15 @@ export default function Home() {
 
       if (paraInserir.length > 0) {
         const { error: errInsert } = await supabase
-          .from('controles_mensais')
-          .insert(paraInserir)
+          .from('controles_mensais').insert(paraInserir)
         if (errInsert) throw errInsert
       }
 
-      // 4. Busca todos os controles com dados dos clientes (1 query)
       const { data, error: errData } = await supabase
         .from('controles_mensais')
         .select('*, clientes(nome, responsavel)')
         .eq('mes', mes)
         .eq('ano', ano)
-
       if (errData) throw errData
 
       const lista: Controle[] = (data || []).map((i: any) => ({
@@ -232,22 +369,13 @@ export default function Home() {
     if (logado) carregar()
   }, [logado, carregar])
 
-  // ── Atualizar checkbox ──────────────────────────────────────────────────────
+  // ── Atualizar checkbox (optimistic) ────────────────────────────────────────
   async function atualizar(id: string, campo: string, valor: boolean) {
-    // Otimistic update para feedback imediato
-    setControles(prev =>
-      prev.map(c => c.id === id ? { ...c, [campo]: valor } : c)
-    )
+    setControles(prev => prev.map(c => c.id === id ? { ...c, [campo]: valor } : c))
     const { error } = await supabase
-      .from('controles_mensais')
-      .update({ [campo]: valor })
-      .eq('id', id)
-
+      .from('controles_mensais').update({ [campo]: valor }).eq('id', id)
     if (error) {
-      // Reverte se falhar
-      setControles(prev =>
-        prev.map(c => c.id === id ? { ...c, [campo]: !valor } : c)
-      )
+      setControles(prev => prev.map(c => c.id === id ? { ...c, [campo]: !valor } : c))
       alert('Erro ao salvar. Tente novamente.')
     }
   }
@@ -258,8 +386,7 @@ export default function Home() {
     setAdicionando(true)
     try {
       const { error } = await supabase
-        .from('clientes')
-        .insert([{ nome: novoNome.trim(), responsavel: novoResp }])
+        .from('clientes').insert([{ nome: novoNome.trim(), responsavel: novoResp }])
       if (error) throw error
       setNovoNome('')
       await carregar()
@@ -280,14 +407,13 @@ export default function Home() {
 
   // ── Mudar responsável ───────────────────────────────────────────────────────
   async function mudarResp(cliente_id: string, r: string) {
-    setControles(prev =>
-      prev.map(c => c.cliente_id === cliente_id ? { ...c, responsavel: r } : c)
-    )
+    setControles(prev => prev.map(c => c.cliente_id === cliente_id ? { ...c, responsavel: r } : c))
     await supabase.from('clientes').update({ responsavel: r }).eq('id', cliente_id)
   }
 
   // ── Cálculos ────────────────────────────────────────────────────────────────
-  const ehFechado = (c: Controle) => c.financeiro && c.fiscal && c.folha && c.conciliado
+  const ehFechado    = (c: Controle) =>  c.financeiro && c.fiscal && c.folha && c.conciliado
+  const semAtividade = (c: Controle) => !c.financeiro && !c.fiscal && !c.folha && !c.conciliado
 
   const statsGerais: Stats = {
     total:    controles.length,
@@ -296,7 +422,7 @@ export default function Home() {
   }
 
   const statsPorResp = RESPONSAVEIS.map(r => {
-    const grupo = controles.filter(c => c.responsavel === r)
+    const grupo    = controles.filter(c => c.responsavel === r)
     const fechados = grupo.filter(ehFechado).length
     return {
       nome:     r,
@@ -306,18 +432,19 @@ export default function Home() {
     }
   })
 
+  const semAtividadeCount = controles.filter(semAtividade).length
+
   const filtrados = controles.filter(c => {
     if (filtroResp !== 'Todos' && c.responsavel !== filtroResp) return false
     if (somentePendentes && ehFechado(c)) return false
+    if (buscaEmpresa && !c.nome.toLowerCase().includes(buscaEmpresa.toLowerCase())) return false
     return true
   })
 
-  // ── Status visual do progresso ──────────────────────────────────────────────
   const percColor =
     statsGerais.perc === 100 ? 'bg-emerald-500' :
     statsGerais.perc >= 80   ? 'bg-blue-500'    :
-    statsGerais.perc >= 50   ? 'bg-amber-500'   :
-                               'bg-red-500'
+    statsGerais.perc >= 50   ? 'bg-amber-500'   : 'bg-red-500'
 
   const percMsg =
     statsGerais.perc === 100 ? '🎉 Todos os balancetes fechados!' :
@@ -325,7 +452,7 @@ export default function Home() {
     statsGerais.perc >= 50   ? `📋 Metade concluída — ${statsGerais.total - statsGerais.fechados} pendente(s)` :
                                `🚨 ${statsGerais.total - statsGerais.fechados} empresa(s) pendentes`
 
-  // ── Telas ───────────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (!logado) {
     return <LoginScreen onLogin={() => setLogado(true)} />
@@ -333,10 +460,18 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+
+      {/* Modal histórico */}
+      {empresaModal && (
+        <ModalHistorico
+          empresa={empresaModal}
+          onClose={() => setEmpresaModal(null)}
+        />
+      )}
+
       {/* ── HEADER ── */}
       <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
         <div className="max-w-screen-xl mx-auto px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
-          {/* Logo + Título */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow shadow-blue-600/30">
               <span className="text-white font-bold text-lg">R</span>
@@ -347,9 +482,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Filtros */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Mês */}
             <select
               value={mes}
               onChange={e => setMes(Number(e.target.value))}
@@ -358,7 +491,6 @@ export default function Home() {
               {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
             </select>
 
-            {/* Ano */}
             <input
               type="number"
               value={ano}
@@ -366,7 +498,6 @@ export default function Home() {
               className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white w-20 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
             />
 
-            {/* Responsável */}
             <select
               value={filtroResp}
               onChange={e => setFiltroResp(e.target.value)}
@@ -376,7 +507,15 @@ export default function Home() {
               {RESPONSAVEIS.map(r => <option key={r}>{r}</option>)}
             </select>
 
-            {/* Somente pendentes */}
+            {/* Busca por empresa */}
+            <input
+              type="text"
+              value={buscaEmpresa}
+              onChange={e => setBuscaEmpresa(e.target.value)}
+              placeholder="🔍 Buscar empresa..."
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white w-44 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+
             <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -387,7 +526,6 @@ export default function Home() {
               Pendentes
             </label>
 
-            {/* Botão sair */}
             <button
               onClick={() => { localStorage.removeItem('logado'); setLogado(false) }}
               className="text-xs text-slate-400 hover:text-red-500 transition-colors px-2 py-1.5 rounded-lg hover:bg-red-50"
@@ -408,22 +546,37 @@ export default function Home() {
           </div>
         )}
 
+        {/* ── ALERTA: SEM ATIVIDADE ── */}
+        {!loading && semAtividadeCount > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-center gap-3">
+            <span className="text-2xl flex-shrink-0">⏰</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-800">
+                {semAtividadeCount} empresa{semAtividadeCount > 1 ? 's' : ''} sem nenhuma atividade em {MESES[mes - 1]}
+              </p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                Nenhum campo marcado. Clique no nome da empresa na tabela para ver o histórico completo.
+              </p>
+            </div>
+            <button
+              onClick={() => { setSomentePendentes(false); setFiltroResp('Todos'); setBuscaEmpresa('') }}
+              className="text-xs text-amber-700 font-medium underline hover:no-underline flex-shrink-0"
+            >
+              Ver todas
+            </button>
+          </div>
+        )}
+
         {/* ── CARDS DE STATS ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total de Empresas" value={statsGerais.total}    accent="border-slate-400" />
-          <StatCard label="Balancetes Fechados" value={statsGerais.fechados} accent="border-emerald-500"
-            sub={`${statsGerais.perc}% concluído`} />
-          <StatCard label="Pendentes"          value={statsGerais.total - statsGerais.fechados} accent="border-red-400" />
-          <StatCard label="Mês de Referência"
-            value={MESES[mes - 1]}
-            sub={String(ano)}
-            accent="border-blue-500"
-          />
+          <StatCard label="Total de Empresas"   value={statsGerais.total}                        accent="border-slate-400" />
+          <StatCard label="Balancetes Fechados" value={statsGerais.fechados} sub={`${statsGerais.perc}% concluído`} accent="border-emerald-500" />
+          <StatCard label="Pendentes"           value={statsGerais.total - statsGerais.fechados} accent="border-red-400" />
+          <StatCard label="Mês de Referência"   value={MESES[mes - 1]} sub={String(ano)}         accent="border-blue-500" />
         </div>
 
         {/* ── PROGRESSO GERAL + POR RESPONSÁVEL ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Progresso geral */}
           <div className="md:col-span-1 bg-white rounded-2xl shadow-sm p-5">
             <div className="flex justify-between items-end mb-3">
               <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Progresso Geral</span>
@@ -431,9 +584,13 @@ export default function Home() {
             </div>
             <ProgressBar value={statsGerais.perc} color={percColor} />
             <p className="text-xs text-slate-500 mt-3">{percMsg}</p>
+            {semAtividadeCount > 0 && (
+              <p className="text-xs text-amber-600 mt-2 font-medium">
+                ⏰ {semAtividadeCount} empresa{semAtividadeCount > 1 ? 's' : ''} sem atividade
+              </p>
+            )}
           </div>
 
-          {/* Por responsável */}
           <div className="md:col-span-2 bg-white rounded-2xl shadow-sm p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">Por Responsável</p>
             <div className="space-y-4">
@@ -442,7 +599,7 @@ export default function Home() {
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-medium text-slate-700">{s.nome}</span>
                     <span className="text-slate-500">
-                      {s.fechados}/{s.total} 
+                      {s.fechados}/{s.total}
                       <span className={`ml-2 font-bold ${
                         s.perc === 100 ? 'text-emerald-600' :
                         s.perc >= 80   ? 'text-blue-600'   :
@@ -450,14 +607,11 @@ export default function Home() {
                       }`}>{s.perc}%</span>
                     </span>
                   </div>
-                  <ProgressBar
-                    value={s.perc}
-                    color={
-                      s.perc === 100 ? 'bg-emerald-500' :
-                      s.perc >= 80   ? 'bg-blue-500'    :
-                      s.perc >= 50   ? 'bg-amber-500'   : 'bg-red-500'
-                    }
-                  />
+                  <ProgressBar value={s.perc} color={
+                    s.perc === 100 ? 'bg-emerald-500' :
+                    s.perc >= 80   ? 'bg-blue-500'    :
+                    s.perc >= 50   ? 'bg-amber-500'   : 'bg-red-500'
+                  } />
                 </div>
               ))}
             </div>
@@ -497,6 +651,7 @@ export default function Home() {
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
               Empresas — {MESES[mes - 1]} {ano}
+              {buscaEmpresa && <span className="ml-2 normal-case text-blue-500 font-normal">· "{buscaEmpresa}"</span>}
             </p>
             <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
               {filtrados.length} empresa{filtrados.length !== 1 ? 's' : ''}
@@ -510,7 +665,7 @@ export default function Home() {
                   <th className="text-left px-5 py-3 font-semibold">Empresa</th>
                   <th className="px-3 py-3 font-semibold">Responsável</th>
                   {CAMPOS.map(c => (
-                    <th key={c.key} className="px-3 py-3 font-semibold text-center">{c.label}</th>
+                    <th key={c.key} className="px-3 py-3 font-semibold text-center" title={c.full}>{c.label}</th>
                   ))}
                   <th className="px-3 py-3 font-semibold text-center">Status</th>
                   <th className="px-3 py-3" />
@@ -524,23 +679,48 @@ export default function Home() {
                     <td colSpan={9} className="text-center py-16 text-slate-400">
                       <div className="text-4xl mb-2">📭</div>
                       <p>Nenhuma empresa encontrada</p>
+                      {buscaEmpresa && (
+                        <button
+                          onClick={() => setBuscaEmpresa('')}
+                          className="mt-2 text-blue-500 text-sm underline hover:no-underline"
+                        >
+                          Limpar busca
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ) : (
                   filtrados.map(c => {
                     const fechado = ehFechado(c)
+                    const semNada = semAtividade(c)
                     return (
                       <tr
                         key={c.id}
                         className={`border-t border-slate-100 transition-colors ${
-                          fechado ? 'hover:bg-emerald-50/50' : 'hover:bg-slate-50'
+                          fechado ? 'hover:bg-emerald-50/50' :
+                          semNada ? 'bg-amber-50/40 hover:bg-amber-50' :
+                                    'hover:bg-slate-50'
                         }`}
                       >
-                        {/* Nome */}
+                        {/* Nome — clicável para histórico */}
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${fechado ? 'bg-emerald-500' : 'bg-red-400'}`} />
-                            <span className="font-medium text-slate-800">{c.nome}</span>
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                              fechado ? 'bg-emerald-500' :
+                              semNada ? 'bg-amber-400'  : 'bg-red-400'
+                            }`} />
+                            <button
+                              onClick={() => setEmpresaModal({ id: c.cliente_id, nome: c.nome, responsavel: c.responsavel })}
+                              className="font-medium text-slate-800 hover:text-blue-600 hover:underline transition-colors text-left"
+                              title="Clique para ver o histórico completo"
+                            >
+                              {c.nome}
+                            </button>
+                            {semNada && (
+                              <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full flex-shrink-0" title="Sem nenhuma atividade neste mês">
+                                ⏰
+                              </span>
+                            )}
                           </div>
                         </td>
 
@@ -560,7 +740,7 @@ export default function Home() {
                           <td key={campo.key} className="px-3 py-3 text-center">
                             <button
                               onClick={() => atualizar(c.id, campo.key, !(c as any)[campo.key])}
-                              title={campo.label}
+                              title={campo.full}
                               className={`w-7 h-7 rounded-lg border-2 inline-flex items-center justify-center transition-all active:scale-90 ${
                                 (c as any)[campo.key]
                                   ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-500/30'
@@ -575,11 +755,11 @@ export default function Home() {
                         {/* Status */}
                         <td className="px-3 py-3 text-center">
                           <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                            fechado
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-red-100 text-red-700'
+                            fechado ? 'bg-emerald-100 text-emerald-700' :
+                            semNada ? 'bg-amber-100 text-amber-700'    :
+                                      'bg-red-100 text-red-700'
                           }`}>
-                            {fechado ? '✓ Fechado' : '○ Pendente'}
+                            {fechado ? '✓ Fechado' : semNada ? '⏰ Sem ativ.' : '○ Pendente'}
                           </span>
                         </td>
 
@@ -601,11 +781,17 @@ export default function Home() {
             </table>
           </div>
 
-          {/* Footer da tabela */}
           {!loading && filtrados.length > 0 && (
             <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-400 flex justify-between">
               <span>{filtrados.filter(ehFechado).length} fechado(s)</span>
-              <span>{filtrados.filter(c => !ehFechado(c)).length} pendente(s)</span>
+              <span>
+                {filtrados.filter(semAtividade).length > 0 && (
+                  <span className="text-amber-500 mr-3">
+                    ⏰ {filtrados.filter(semAtividade).length} sem atividade
+                  </span>
+                )}
+                {filtrados.filter(c => !ehFechado(c)).length} pendente(s)
+              </span>
             </div>
           )}
         </div>
