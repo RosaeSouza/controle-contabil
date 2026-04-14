@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Image from 'next/image'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Controle = {
   id: string
@@ -15,266 +16,601 @@ type Controle = {
   conciliado: boolean
 }
 
-export default function Home() {
-  const [controles, setControles] = useState<Controle[]>([])
-  const [mes, setMes] = useState(new Date().getMonth() + 1)
-  const [ano, setAno] = useState(new Date().getFullYear())
+type Stats = {
+  total: number
+  fechados: number
+  perc: number
+}
 
-  const [filtroResp, setFiltroResp] = useState('Todos')
-  const [somentePendentes, setSomentePendentes] = useState(false)
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-  const [nome, setNome] = useState('')
-  const [responsavel, setResponsavel] = useState('Benedito')
+const RESPONSAVEIS = ['Benedito', 'Clarice', 'João Pedro']
 
-  const [logado, setLogado] = useState(false)
-  const [senhaInput, setSenhaInput] = useState('')
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+]
 
-  const responsaveis = ['Benedito', 'Clarice', 'João Pedro']
+const CAMPOS = [
+  { key: 'financeiro', label: 'Fin' },
+  { key: 'fiscal',     label: 'Fis' },
+  { key: 'folha',      label: 'Fol' },
+  { key: 'conciliado', label: 'Conc' },
+] as const
 
-  useEffect(() => {
-    if (localStorage.getItem('logado') === 'true') setLogado(true)
-  }, [])
+// ─── Login Screen ─────────────────────────────────────────────────────────────
 
-  function login() {
-    if (senhaInput === 'Tetr@2025') {
-      setLogado(true)
-      localStorage.setItem('logado', 'true')
-    }
-  }
+function LoginScreen({ onLogin }: { onLogin: () => void }) {
+  const [senha, setSenha] = useState('')
+  const [erro, setErro] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  function logout() {
-    localStorage.removeItem('logado')
-    setLogado(false)
-  }
-
-  useEffect(() => {
-    carregar()
-  }, [mes, ano])
-
-  async function carregar() {
-    const { data: clientes } = await supabase.from('clientes').select('*')
-
-    for (const c of clientes || []) {
-      const { data } = await supabase
-        .from('controles_mensais')
-        .select('*')
-        .eq('cliente_id', c.id)
-        .eq('mes', mes)
-        .eq('ano', ano)
-        .maybeSingle()
-
-      if (!data) {
-        await supabase.from('controles_mensais').insert([
-          { cliente_id: c.id, mes, ano }
-        ])
+  function handleLogin() {
+    setLoading(true)
+    setErro(false)
+    setTimeout(() => {
+      if (senha === 'Tetr@2025') {
+        localStorage.setItem('logado', 'true')
+        onLogin()
+      } else {
+        setErro(true)
       }
-    }
-
-    const { data } = await supabase
-      .from('controles_mensais')
-      .select(`*, clientes(nome,responsavel)`)
-      .eq('mes', mes)
-      .eq('ano', ano)
-
-    const lista = (data || []).map((i: any) => ({
-      id: i.id,
-      cliente_id: i.cliente_id,
-      nome: i.clientes.nome,
-      responsavel: i.clientes.responsavel,
-      financeiro: i.financeiro,
-      fiscal: i.fiscal,
-      folha: i.folha,
-      conciliado: i.conciliado
-    }))
-
-    lista.sort((a, b) => a.nome.localeCompare(b.nome))
-
-    setControles(lista)
-  }
-
-  async function atualizar(id: string, campo: string, valor: boolean) {
-    await supabase.from('controles_mensais').update({ [campo]: valor }).eq('id', id)
-    carregar()
-  }
-
-  async function addCliente() {
-    if (!nome) return
-    await supabase.from('clientes').insert([{ nome, responsavel }])
-    setNome('')
-    carregar()
-  }
-
-  async function excluir(id: string) {
-    if (!confirm('Excluir?')) return
-    await supabase.from('clientes').delete().eq('id', id)
-    carregar()
-  }
-
-  async function mudarResp(id: string, r: string) {
-    await supabase.from('clientes').update({ responsavel: r }).eq('id', id)
-    carregar()
-  }
-
-  const filtrados = controles.filter(c => {
-    const fechado = c.financeiro && c.fiscal && c.folha && c.conciliado
-    if (filtroResp !== 'Todos' && c.responsavel !== filtroResp) return false
-    if (somentePendentes && fechado) return false
-    return true
-  })
-
-  const total = controles.length
-  const fechados = controles.filter(c => c.financeiro && c.fiscal && c.folha && c.conciliado).length
-  const perc = total ? Math.round((fechados / total) * 100) : 0
-
-  if (!logado) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-white p-6 rounded-xl shadow text-center">
-          <input
-            type="password"
-            placeholder="Senha"
-            value={senhaInput}
-            onChange={(e) => setSenhaInput(e.target.value)}
-            className="border p-2 rounded mb-4 w-full"
-          />
-          <button onClick={login} className="bg-blue-500 text-white px-4 py-2 rounded w-full">
-            Entrar
-          </button>
-        </div>
-      </div>
-    )
+      setLoading(false)
+    }, 300)
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-3">
-          <Image src="/logo.png" width={42} height={42} alt="logo"/>
-          <h1 className="text-2xl font-bold text-gray-800">RESULTS CONTADORES</h1>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)' }}>
+      <div className="w-full max-w-sm">
+        {/* Logo area */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 mb-4 shadow-lg shadow-blue-600/30">
+            <span className="text-white font-bold text-2xl">R</span>
+          </div>
+          <h1 className="text-white font-bold text-xl tracking-wide">RESULTS CONTADORES</h1>
+          <p className="text-slate-400 text-sm mt-1">Controle de Fechamento Mensal</p>
         </div>
 
-        <div className="flex gap-3 items-center bg-white px-4 py-2 rounded-xl shadow-sm">
-          <select value={mes} onChange={e=>setMes(Number(e.target.value))}>
-            {[...Array(12)].map((_,i)=><option key={i}>{i+1}</option>)}
-          </select>
-
-          <input value={ano} onChange={e=>setAno(Number(e.target.value))} className="w-20"/>
-
-          <select value={filtroResp} onChange={e=>setFiltroResp(e.target.value)}>
-            <option>Todos</option>
-            {responsaveis.map(r=><option key={r}>{r}</option>)}
-          </select>
-
-          <label className="flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={somentePendentes} onChange={e=>setSomentePendentes(e.target.checked)}/>
-            Pendentes
-          </label>
-
-          <button onClick={logout} className="text-red-400 text-sm">Sair</button>
+        {/* Card */}
+        <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8">
+          <label className="block text-slate-300 text-sm mb-2 font-medium">Senha de Acesso</label>
+          <input
+            type="password"
+            value={senha}
+            onChange={e => { setSenha(e.target.value); setErro(false) }}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            placeholder="••••••••••"
+            className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
+            autoFocus
+          />
+          {erro && (
+            <p className="text-red-400 text-xs mt-2">Senha incorreta. Tente novamente.</p>
+          )}
+          <button
+            onClick={handleLogin}
+            disabled={loading || !senha}
+            className="w-full mt-4 py-3 rounded-xl font-semibold text-white transition-all bg-blue-600 hover:bg-blue-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/30"
+          >
+            {loading ? 'Verificando...' : 'Entrar'}
+          </button>
         </div>
       </div>
-
-      {/* DASHBOARD */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-        <Card title="Total" value={total} color="blue"/>
-        <Card title="Fechados" value={fechados} color="green"/>
-        <Card title="Pendentes" value={total - fechados} color="red"/>
-      </div>
-
-      {/* PROGRESSO */}
-      <div className="bg-white rounded-xl shadow p-5 mb-6">
-        <div className="flex justify-between mb-2">
-          <span>Progresso</span>
-          <span>{perc}%</span>
-        </div>
-
-        <div className="w-full h-3 bg-gray-200 rounded-full">
-          <div className="h-3 bg-green-500 rounded-full" style={{ width: `${perc}%` }}/>
-        </div>
-
-        <div className="mt-2 text-sm">
-          {perc === 100 && "🎉 Tudo concluído!"}
-          {perc >= 80 && perc < 100 && "⚠️ Falta pouco"}
-          {perc < 50 && "🚨 Muitas pendências"}
-        </div>
-      </div>
-
-      {/* CADASTRO */}
-      <div className="bg-white p-4 rounded-xl shadow mb-6 flex gap-2">
-        <input value={nome} onChange={e=>setNome(e.target.value)} placeholder="Cliente" className="border p-2 rounded"/>
-        <select value={responsavel} onChange={e=>setResponsavel(e.target.value)} className="border p-2 rounded">
-          {responsaveis.map(r=><option key={r}>{r}</option>)}
-        </select>
-        <button onClick={addCliente} className="bg-blue-500 text-white px-4 rounded">Adicionar</button>
-      </div>
-
-      {/* TABELA */}
-      <div className="bg-white rounded-xl shadow overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-3">Cliente</th>
-              <th>Resp</th>
-              <th>Fin</th>
-              <th>Fis</th>
-              <th>Fol</th>
-              <th>Conc</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {filtrados.map(c=>{
-              const fechado = c.financeiro && c.fiscal && c.folha && c.conciliado
-
-              return (
-                <tr key={c.id} className="border-t hover:bg-gray-50 text-center">
-                  <td className="text-left p-3 font-medium">{c.nome}</td>
-
-                  <td>
-                    <select value={c.responsavel} onChange={e=>mudarResp(c.cliente_id,e.target.value)}>
-                      {responsaveis.map(r=><option key={r}>{r}</option>)}
-                    </select>
-                  </td>
-
-                  {['financeiro','fiscal','folha','conciliado'].map(campo=>(
-                    <td key={campo}>
-                      <input type="checkbox" checked={(c as any)[campo]} onChange={e=>atualizar(c.id,campo,e.target.checked)}/>
-                    </td>
-                  ))}
-
-                  <td>
-                    {fechado ? "🟢 Fechado" : "🔴 Pendente"}
-                  </td>
-
-                  <td>
-                    <button onClick={()=>excluir(c.cliente_id)} className="text-red-400 text-xs">Excluir</button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
     </div>
   )
 }
 
-function Card({title,value,color}:{title:string,value:number,color:string}){
-  const colors:any = {
-    blue:"text-blue-600",
-    green:"text-green-600",
-    red:"text-red-600"
+// ─── Skeleton Row ─────────────────────────────────────────────────────────────
+
+function SkeletonRow() {
+  return (
+    <tr className="border-t border-slate-100 animate-pulse">
+      <td className="p-3"><div className="h-4 bg-slate-200 rounded w-40" /></td>
+      <td className="p-3"><div className="h-4 bg-slate-200 rounded w-20 mx-auto" /></td>
+      {[0,1,2,3].map(i => (
+        <td key={i} className="p-3 text-center"><div className="h-5 w-5 bg-slate-200 rounded mx-auto" /></td>
+      ))}
+      <td className="p-3"><div className="h-5 bg-slate-200 rounded w-20 mx-auto" /></td>
+      <td className="p-3"><div className="h-5 bg-slate-200 rounded w-12 mx-auto" /></td>
+    </tr>
+  )
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent: string }) {
+  return (
+    <div className={`bg-white rounded-2xl shadow-sm border-l-4 p-5 ${accent}`}>
+      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+      <p className="text-3xl font-bold text-slate-800">{value}</p>
+      {sub && <p className="text-sm text-slate-500 mt-1">{sub}</p>}
+    </div>
+  )
+}
+
+// ─── Progress Bar ─────────────────────────────────────────────────────────────
+
+function ProgressBar({ value, color = 'bg-blue-500' }: { value: number; color?: string }) {
+  return (
+    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+      <div
+        className={`h-2 rounded-full transition-all duration-700 ${color}`}
+        style={{ width: `${value}%` }}
+      />
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function Home() {
+  const [logado, setLogado]               = useState(false)
+  const [controles, setControles]         = useState<Controle[]>([])
+  const [loading, setLoading]             = useState(false)
+  const [erro, setErro]                   = useState<string | null>(null)
+  const [mes, setMes]                     = useState(new Date().getMonth() + 1)
+  const [ano, setAno]                     = useState(new Date().getFullYear())
+  const [filtroResp, setFiltroResp]       = useState('Todos')
+  const [somentePendentes, setSomentePendentes] = useState(false)
+  const [novoNome, setNovoNome]           = useState('')
+  const [novoResp, setNovoResp]           = useState('Benedito')
+  const [adicionando, setAdicionando]     = useState(false)
+
+  // Verifica login salvo
+  useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('logado') === 'true') {
+      setLogado(true)
+    }
+  }, [])
+
+  // ── Carregar dados (sem N+1) ────────────────────────────────────────────────
+  const carregar = useCallback(async () => {
+    setLoading(true)
+    setErro(null)
+    try {
+      // 1. Busca todos os clientes
+      const { data: clientes, error: errClientes } = await supabase
+        .from('clientes')
+        .select('*')
+
+      if (errClientes) throw errClientes
+
+      const clientesLista = clientes || []
+
+      // 2. Busca todos os controles do mês/ano em UMA só query
+      const { data: existentes, error: errExistentes } = await supabase
+        .from('controles_mensais')
+        .select('cliente_id')
+        .eq('mes', mes)
+        .eq('ano', ano)
+
+      if (errExistentes) throw errExistentes
+
+      // 3. Identifica quais clientes NÃO têm registro e insere em bulk
+      const idsExistentes = new Set((existentes || []).map((r: any) => r.cliente_id))
+      const paraInserir = clientesLista
+        .filter(c => !idsExistentes.has(c.id))
+        .map(c => ({ cliente_id: c.id, mes, ano }))
+
+      if (paraInserir.length > 0) {
+        const { error: errInsert } = await supabase
+          .from('controles_mensais')
+          .insert(paraInserir)
+        if (errInsert) throw errInsert
+      }
+
+      // 4. Busca todos os controles com dados dos clientes (1 query)
+      const { data, error: errData } = await supabase
+        .from('controles_mensais')
+        .select('*, clientes(nome, responsavel)')
+        .eq('mes', mes)
+        .eq('ano', ano)
+
+      if (errData) throw errData
+
+      const lista: Controle[] = (data || []).map((i: any) => ({
+        id:          i.id,
+        cliente_id:  i.cliente_id,
+        nome:        i.clientes?.nome ?? '(sem nome)',
+        responsavel: i.clientes?.responsavel ?? '-',
+        financeiro:  i.financeiro  ?? false,
+        fiscal:      i.fiscal      ?? false,
+        folha:       i.folha       ?? false,
+        conciliado:  i.conciliado  ?? false,
+      }))
+
+      lista.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      setControles(lista)
+    } catch (e: any) {
+      console.error(e)
+      setErro('Erro ao carregar dados. Verifique a conexão com o banco.')
+    } finally {
+      setLoading(false)
+    }
+  }, [mes, ano])
+
+  useEffect(() => {
+    if (logado) carregar()
+  }, [logado, carregar])
+
+  // ── Atualizar checkbox ──────────────────────────────────────────────────────
+  async function atualizar(id: string, campo: string, valor: boolean) {
+    // Otimistic update para feedback imediato
+    setControles(prev =>
+      prev.map(c => c.id === id ? { ...c, [campo]: valor } : c)
+    )
+    const { error } = await supabase
+      .from('controles_mensais')
+      .update({ [campo]: valor })
+      .eq('id', id)
+
+    if (error) {
+      // Reverte se falhar
+      setControles(prev =>
+        prev.map(c => c.id === id ? { ...c, [campo]: !valor } : c)
+      )
+      alert('Erro ao salvar. Tente novamente.')
+    }
+  }
+
+  // ── Adicionar cliente ───────────────────────────────────────────────────────
+  async function addCliente() {
+    if (!novoNome.trim()) return
+    setAdicionando(true)
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .insert([{ nome: novoNome.trim(), responsavel: novoResp }])
+      if (error) throw error
+      setNovoNome('')
+      await carregar()
+    } catch {
+      alert('Erro ao adicionar cliente.')
+    } finally {
+      setAdicionando(false)
+    }
+  }
+
+  // ── Excluir cliente ─────────────────────────────────────────────────────────
+  async function excluir(cliente_id: string, nome: string) {
+    if (!confirm(`Excluir o cliente "${nome}"? Esta ação não pode ser desfeita.`)) return
+    const { error } = await supabase.from('clientes').delete().eq('id', cliente_id)
+    if (error) { alert('Erro ao excluir.'); return }
+    await carregar()
+  }
+
+  // ── Mudar responsável ───────────────────────────────────────────────────────
+  async function mudarResp(cliente_id: string, r: string) {
+    setControles(prev =>
+      prev.map(c => c.cliente_id === cliente_id ? { ...c, responsavel: r } : c)
+    )
+    await supabase.from('clientes').update({ responsavel: r }).eq('id', cliente_id)
+  }
+
+  // ── Cálculos ────────────────────────────────────────────────────────────────
+  const ehFechado = (c: Controle) => c.financeiro && c.fiscal && c.folha && c.conciliado
+
+  const statsGerais: Stats = {
+    total:    controles.length,
+    fechados: controles.filter(ehFechado).length,
+    perc:     controles.length ? Math.round((controles.filter(ehFechado).length / controles.length) * 100) : 0,
+  }
+
+  const statsPorResp = RESPONSAVEIS.map(r => {
+    const grupo = controles.filter(c => c.responsavel === r)
+    const fechados = grupo.filter(ehFechado).length
+    return {
+      nome:     r,
+      total:    grupo.length,
+      fechados,
+      perc:     grupo.length ? Math.round((fechados / grupo.length) * 100) : 0,
+    }
+  })
+
+  const filtrados = controles.filter(c => {
+    if (filtroResp !== 'Todos' && c.responsavel !== filtroResp) return false
+    if (somentePendentes && ehFechado(c)) return false
+    return true
+  })
+
+  // ── Status visual do progresso ──────────────────────────────────────────────
+  const percColor =
+    statsGerais.perc === 100 ? 'bg-emerald-500' :
+    statsGerais.perc >= 80   ? 'bg-blue-500'    :
+    statsGerais.perc >= 50   ? 'bg-amber-500'   :
+                               'bg-red-500'
+
+  const percMsg =
+    statsGerais.perc === 100 ? '🎉 Todos os balancetes fechados!' :
+    statsGerais.perc >= 80   ? `⚡ Quase lá — faltam ${statsGerais.total - statsGerais.fechados} empresa(s)` :
+    statsGerais.perc >= 50   ? `📋 Metade concluída — ${statsGerais.total - statsGerais.fechados} pendente(s)` :
+                               `🚨 ${statsGerais.total - statsGerais.fechados} empresa(s) pendentes`
+
+  // ── Telas ───────────────────────────────────────────────────────────────────
+
+  if (!logado) {
+    return <LoginScreen onLogin={() => setLogado(true)} />
   }
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow">
-      <div className="text-sm text-gray-500">{title}</div>
-      <div className={`text-2xl font-bold ${colors[color]}`}>{value}</div>
+    <div className="min-h-screen bg-slate-50">
+      {/* ── HEADER ── */}
+      <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
+        <div className="max-w-screen-xl mx-auto px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+          {/* Logo + Título */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow shadow-blue-600/30">
+              <span className="text-white font-bold text-lg">R</span>
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-slate-800 leading-none">Results Contadores</h1>
+              <p className="text-xs text-slate-400">Controle de Fechamento</p>
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Mês */}
+            <select
+              value={mes}
+              onChange={e => setMes(Number(e.target.value))}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            >
+              {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+
+            {/* Ano */}
+            <input
+              type="number"
+              value={ano}
+              onChange={e => setAno(Number(e.target.value))}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white w-20 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+
+            {/* Responsável */}
+            <select
+              value={filtroResp}
+              onChange={e => setFiltroResp(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            >
+              <option value="Todos">Todos</option>
+              {RESPONSAVEIS.map(r => <option key={r}>{r}</option>)}
+            </select>
+
+            {/* Somente pendentes */}
+            <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={somentePendentes}
+                onChange={e => setSomentePendentes(e.target.checked)}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              Pendentes
+            </label>
+
+            {/* Botão sair */}
+            <button
+              onClick={() => { localStorage.removeItem('logado'); setLogado(false) }}
+              className="text-xs text-slate-400 hover:text-red-500 transition-colors px-2 py-1.5 rounded-lg hover:bg-red-50"
+            >
+              ⬡ Sair
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
+
+        {/* ── ERRO ── */}
+        {erro && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm flex items-center gap-2">
+            <span>⚠️</span> {erro}
+            <button onClick={carregar} className="ml-auto underline hover:no-underline text-red-600">Tentar novamente</button>
+          </div>
+        )}
+
+        {/* ── CARDS DE STATS ── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard label="Total de Empresas" value={statsGerais.total}    accent="border-slate-400" />
+          <StatCard label="Balancetes Fechados" value={statsGerais.fechados} accent="border-emerald-500"
+            sub={`${statsGerais.perc}% concluído`} />
+          <StatCard label="Pendentes"          value={statsGerais.total - statsGerais.fechados} accent="border-red-400" />
+          <StatCard label="Mês de Referência"
+            value={MESES[mes - 1]}
+            sub={String(ano)}
+            accent="border-blue-500"
+          />
+        </div>
+
+        {/* ── PROGRESSO GERAL + POR RESPONSÁVEL ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Progresso geral */}
+          <div className="md:col-span-1 bg-white rounded-2xl shadow-sm p-5">
+            <div className="flex justify-between items-end mb-3">
+              <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Progresso Geral</span>
+              <span className="text-2xl font-bold text-slate-800">{statsGerais.perc}%</span>
+            </div>
+            <ProgressBar value={statsGerais.perc} color={percColor} />
+            <p className="text-xs text-slate-500 mt-3">{percMsg}</p>
+          </div>
+
+          {/* Por responsável */}
+          <div className="md:col-span-2 bg-white rounded-2xl shadow-sm p-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">Por Responsável</p>
+            <div className="space-y-4">
+              {statsPorResp.map(s => (
+                <div key={s.nome}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-medium text-slate-700">{s.nome}</span>
+                    <span className="text-slate-500">
+                      {s.fechados}/{s.total} 
+                      <span className={`ml-2 font-bold ${
+                        s.perc === 100 ? 'text-emerald-600' :
+                        s.perc >= 80   ? 'text-blue-600'   :
+                        s.perc >= 50   ? 'text-amber-600'  : 'text-red-600'
+                      }`}>{s.perc}%</span>
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={s.perc}
+                    color={
+                      s.perc === 100 ? 'bg-emerald-500' :
+                      s.perc >= 80   ? 'bg-blue-500'    :
+                      s.perc >= 50   ? 'bg-amber-500'   : 'bg-red-500'
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── CADASTRO DE CLIENTE ── */}
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Adicionar Empresa</p>
+          <div className="flex gap-2 flex-wrap">
+            <input
+              value={novoNome}
+              onChange={e => setNovoNome(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addCliente()}
+              placeholder="Nome da empresa"
+              className="flex-1 min-w-48 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+            <select
+              value={novoResp}
+              onChange={e => setNovoResp(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            >
+              {RESPONSAVEIS.map(r => <option key={r}>{r}</option>)}
+            </select>
+            <button
+              onClick={addCliente}
+              disabled={adicionando || !novoNome.trim()}
+              className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 shadow-sm shadow-blue-600/30"
+            >
+              {adicionando ? 'Adicionando...' : '+ Adicionar'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── TABELA ── */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Empresas — {MESES[mes - 1]} {ano}
+            </p>
+            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+              {filtrados.length} empresa{filtrados.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
+                  <th className="text-left px-5 py-3 font-semibold">Empresa</th>
+                  <th className="px-3 py-3 font-semibold">Responsável</th>
+                  {CAMPOS.map(c => (
+                    <th key={c.key} className="px-3 py-3 font-semibold text-center">{c.label}</th>
+                  ))}
+                  <th className="px-3 py-3 font-semibold text-center">Status</th>
+                  <th className="px-3 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
+                ) : filtrados.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-16 text-slate-400">
+                      <div className="text-4xl mb-2">📭</div>
+                      <p>Nenhuma empresa encontrada</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filtrados.map(c => {
+                    const fechado = ehFechado(c)
+                    return (
+                      <tr
+                        key={c.id}
+                        className={`border-t border-slate-100 transition-colors ${
+                          fechado ? 'hover:bg-emerald-50/50' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        {/* Nome */}
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${fechado ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                            <span className="font-medium text-slate-800">{c.nome}</span>
+                          </div>
+                        </td>
+
+                        {/* Responsável */}
+                        <td className="px-3 py-3 text-center">
+                          <select
+                            value={c.responsavel}
+                            onChange={e => mudarResp(c.cliente_id, e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-600 bg-white focus:outline-none focus:border-blue-400"
+                          >
+                            {RESPONSAVEIS.map(r => <option key={r}>{r}</option>)}
+                          </select>
+                        </td>
+
+                        {/* Checkboxes */}
+                        {CAMPOS.map(campo => (
+                          <td key={campo.key} className="px-3 py-3 text-center">
+                            <button
+                              onClick={() => atualizar(c.id, campo.key, !(c as any)[campo.key])}
+                              title={campo.label}
+                              className={`w-7 h-7 rounded-lg border-2 inline-flex items-center justify-center transition-all active:scale-90 ${
+                                (c as any)[campo.key]
+                                  ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                                  : 'border-slate-300 text-transparent hover:border-slate-400'
+                              }`}
+                            >
+                              ✓
+                            </button>
+                          </td>
+                        ))}
+
+                        {/* Status */}
+                        <td className="px-3 py-3 text-center">
+                          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                            fechado
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {fechado ? '✓ Fechado' : '○ Pendente'}
+                          </span>
+                        </td>
+
+                        {/* Excluir */}
+                        <td className="px-3 py-3 text-center">
+                          <button
+                            onClick={() => excluir(c.cliente_id, c.nome)}
+                            className="text-slate-300 hover:text-red-500 transition-colors text-lg leading-none"
+                            title="Excluir empresa"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer da tabela */}
+          {!loading && filtrados.length > 0 && (
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-400 flex justify-between">
+              <span>{filtrados.filter(ehFechado).length} fechado(s)</span>
+              <span>{filtrados.filter(c => !ehFechado(c)).length} pendente(s)</span>
+            </div>
+          )}
+        </div>
+
+      </main>
     </div>
   )
 }
