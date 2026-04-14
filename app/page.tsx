@@ -31,7 +31,6 @@ export default function Home() {
 
   const responsaveis = ['Benedito', 'Clarice', 'João Pedro']
 
-  // LOGIN
   useEffect(() => {
     if (localStorage.getItem('logado') === 'true') setLogado(true)
   }, [])
@@ -88,7 +87,6 @@ export default function Home() {
       conciliado: i.conciliado
     }))
 
-    // 🔥 ORDEM ALFABÉTICA FIXA
     lista.sort((a, b) => a.nome.localeCompare(b.nome))
 
     setControles(lista)
@@ -119,10 +117,8 @@ export default function Home() {
 
   const filtrados = controles.filter(c => {
     const fechado = c.financeiro && c.fiscal && c.folha && c.conciliado
-
     if (filtroResp !== 'Todos' && c.responsavel !== filtroResp) return false
     if (somentePendentes && fechado) return false
-
     return true
   })
 
@@ -132,104 +128,153 @@ export default function Home() {
 
   if (!logado) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <input type="password" onChange={e=>setSenhaInput(e.target.value)} />
-        <button onClick={login}>Entrar</button>
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-6 rounded-xl shadow text-center">
+          <input
+            type="password"
+            placeholder="Senha"
+            value={senhaInput}
+            onChange={(e) => setSenhaInput(e.target.value)}
+            className="border p-2 rounded mb-4 w-full"
+          />
+          <button onClick={login} className="bg-blue-500 text-white px-4 py-2 rounded w-full">
+            Entrar
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
 
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-2">
-          <Image src="/logo.png" width={40} height={40} alt="logo"/>
-          <h1 className="font-bold text-xl">RESULTS CONTADORES</h1>
+      <div className="flex justify-between items-center mb-8">
+        <div className="flex items-center gap-3">
+          <Image src="/logo.png" width={42} height={42} alt="logo"/>
+          <h1 className="text-2xl font-bold text-gray-800">RESULTS CONTADORES</h1>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-3 items-center bg-white px-4 py-2 rounded-xl shadow-sm">
           <select value={mes} onChange={e=>setMes(Number(e.target.value))}>
             {[...Array(12)].map((_,i)=><option key={i}>{i+1}</option>)}
           </select>
 
-          <input value={ano} onChange={e=>setAno(Number(e.target.value))}/>
+          <input value={ano} onChange={e=>setAno(Number(e.target.value))} className="w-20"/>
 
           <select value={filtroResp} onChange={e=>setFiltroResp(e.target.value)}>
             <option>Todos</option>
             {responsaveis.map(r=><option key={r}>{r}</option>)}
           </select>
 
-          <label>
+          <label className="flex items-center gap-1 text-sm">
             <input type="checkbox" checked={somentePendentes} onChange={e=>setSomentePendentes(e.target.checked)}/>
             Pendentes
           </label>
 
-          <button onClick={logout}>Sair</button>
+          <button onClick={logout} className="text-red-400 text-sm">Sair</button>
         </div>
       </div>
 
       {/* DASHBOARD */}
-      <div className="mb-6">
-        <div>Total: {total} | Fechados: {fechados} | {perc}%</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+        <Card title="Total" value={total} color="blue"/>
+        <Card title="Fechados" value={fechados} color="green"/>
+        <Card title="Pendentes" value={total - fechados} color="red"/>
+      </div>
+
+      {/* PROGRESSO */}
+      <div className="bg-white rounded-xl shadow p-5 mb-6">
+        <div className="flex justify-between mb-2">
+          <span>Progresso</span>
+          <span>{perc}%</span>
+        </div>
+
+        <div className="w-full h-3 bg-gray-200 rounded-full">
+          <div className="h-3 bg-green-500 rounded-full" style={{ width: `${perc}%` }}/>
+        </div>
+
+        <div className="mt-2 text-sm">
+          {perc === 100 && "🎉 Tudo concluído!"}
+          {perc >= 80 && perc < 100 && "⚠️ Falta pouco"}
+          {perc < 50 && "🚨 Muitas pendências"}
+        </div>
       </div>
 
       {/* CADASTRO */}
-      <div className="mb-6">
-        <input value={nome} onChange={e=>setNome(e.target.value)} placeholder="Cliente"/>
-        <select value={responsavel} onChange={e=>setResponsavel(e.target.value)}>
+      <div className="bg-white p-4 rounded-xl shadow mb-6 flex gap-2">
+        <input value={nome} onChange={e=>setNome(e.target.value)} placeholder="Cliente" className="border p-2 rounded"/>
+        <select value={responsavel} onChange={e=>setResponsavel(e.target.value)} className="border p-2 rounded">
           {responsaveis.map(r=><option key={r}>{r}</option>)}
         </select>
-        <button onClick={addCliente}>Adicionar</button>
+        <button onClick={addCliente} className="bg-blue-500 text-white px-4 rounded">Adicionar</button>
       </div>
 
       {/* TABELA */}
-      <table className="w-full">
-        <thead>
-          <tr>
-            <th>Cliente</th>
-            <th>Resp</th>
-            <th>Fin</th>
-            <th>Fis</th>
-            <th>Fol</th>
-            <th>Conc</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
+      <div className="bg-white rounded-xl shadow overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left p-3">Cliente</th>
+              <th>Resp</th>
+              <th>Fin</th>
+              <th>Fis</th>
+              <th>Fol</th>
+              <th>Conc</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
 
-        <tbody>
-          {filtrados.map(c=>{
-            const fechado = c.financeiro && c.fiscal && c.folha && c.conciliado
+          <tbody>
+            {filtrados.map(c=>{
+              const fechado = c.financeiro && c.fiscal && c.folha && c.conciliado
 
-            return (
-              <tr key={c.id}>
-                <td>{c.nome}</td>
+              return (
+                <tr key={c.id} className="border-t hover:bg-gray-50 text-center">
+                  <td className="text-left p-3 font-medium">{c.nome}</td>
 
-                <td>
-                  <select value={c.responsavel} onChange={e=>mudarResp(c.cliente_id,e.target.value)}>
-                    {responsaveis.map(r=><option key={r}>{r}</option>)}
-                  </select>
-                </td>
-
-                {['financeiro','fiscal','folha','conciliado'].map(campo=>(
-                  <td key={campo}>
-                    <input type="checkbox" checked={(c as any)[campo]} onChange={e=>atualizar(c.id,campo,e.target.checked)}/>
+                  <td>
+                    <select value={c.responsavel} onChange={e=>mudarResp(c.cliente_id,e.target.value)}>
+                      {responsaveis.map(r=><option key={r}>{r}</option>)}
+                    </select>
                   </td>
-                ))}
 
-                <td>{fechado ? '🟢 Fechado' : '🔴 Pendente'}</td>
+                  {['financeiro','fiscal','folha','conciliado'].map(campo=>(
+                    <td key={campo}>
+                      <input type="checkbox" checked={(c as any)[campo]} onChange={e=>atualizar(c.id,campo,e.target.checked)}/>
+                    </td>
+                  ))}
 
-                <td>
-                  <button onClick={()=>excluir(c.cliente_id)}>Excluir</button>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                  <td>
+                    {fechado ? "🟢 Fechado" : "🔴 Pendente"}
+                  </td>
 
+                  <td>
+                    <button onClick={()=>excluir(c.cliente_id)} className="text-red-400 text-xs">Excluir</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  )
+}
+
+function Card({title,value,color}:{title:string,value:number,color:string}){
+  const colors:any = {
+    blue:"text-blue-600",
+    green:"text-green-600",
+    red:"text-red-600"
+  }
+
+  return (
+    <div className="bg-white p-4 rounded-xl shadow">
+      <div className="text-sm text-gray-500">{title}</div>
+      <div className={`text-2xl font-bold ${colors[color]}`}>{value}</div>
     </div>
   )
 }
